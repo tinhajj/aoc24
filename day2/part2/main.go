@@ -8,6 +8,11 @@ import (
 	"strings"
 )
 
+// some notes about this day 2, it took an hour to solve and part 2 took a while
+// because I made an assumption that you can be greedy and just remove one of
+// the first two levels that causes the report to be bad.  That doesn't seem to
+// be the case for some reason and I ended up brute forcing to get the answer
+// quicker.
 func main() {
 	b, err := os.ReadFile("day_2_input.txt")
 	if err != nil {
