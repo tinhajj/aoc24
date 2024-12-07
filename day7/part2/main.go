@@ -13,6 +13,7 @@ type Operation int
 const (
 	ADD      Operation = iota
 	MULTIPLY Operation = iota
+	CONCAT   Operation = iota
 )
 
 func main() {
