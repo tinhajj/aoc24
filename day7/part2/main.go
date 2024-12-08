@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -52,6 +53,16 @@ func DoOperation(op Operation, operands []int, sum int) []int {
 			return []int{sum * operands[0]}
 		case ADD:
 			return []int{sum + operands[0]}
+		case CONCAT:
+			first := strconv.Itoa(sum)
+			second := strconv.Itoa(operands[0])
+			combined, err := strconv.Atoi(first + second)
+
+			if err != nil {
+				return []int{}
+			}
+
+			return []int{combined}
 		}
 	}
 
@@ -61,12 +72,29 @@ func DoOperation(op Operation, operands []int, sum int) []int {
 
 		option1 := DoOperation(MULTIPLY, operands[1:], result)
 		option2 := DoOperation(ADD, operands[1:], result)
-		return slices.Concat(option1, option2)
+		option3 := DoOperation(CONCAT, operands[1:], result)
+		return slices.Concat(option1, option2, option3)
 	case ADD:
 		result := sum + operands[0]
+
 		option1 := DoOperation(MULTIPLY, operands[1:], result)
 		option2 := DoOperation(ADD, operands[1:], result)
-		return slices.Concat(option1, option2)
+		option3 := DoOperation(CONCAT, operands[1:], result)
+		return slices.Concat(option1, option2, option3)
+	case CONCAT:
+		first := strconv.Itoa(sum)
+		second := strconv.Itoa(operands[0])
+
+		combined, err := strconv.Atoi(first + second)
+
+		if err != nil {
+			return []int{}
+		}
+
+		option1 := DoOperation(MULTIPLY, operands[1:], combined)
+		option2 := DoOperation(ADD, operands[1:], combined)
+		option3 := DoOperation(CONCAT, operands[1:], combined)
+		return slices.Concat(option1, option2, option3)
 	}
 
 	panic("unknown op")
