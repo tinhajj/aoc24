@@ -12,7 +12,7 @@ type pair struct {
 }
 
 func main() {
-	b, err := os.ReadFile("day_4_input.txt")
+	b, err := os.ReadFile("day_4_sample_input.txt")
 	if err != nil {
 		panic(err)
 	}

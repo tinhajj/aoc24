@@ -1,24 +1,18 @@
 package main
 
 import (
-	"aoc24/scan"
 	"fmt"
 	"os"
-	"slices"
-	"strconv"
 	"strings"
 )
 
-type Operation int
-
-const (
-	ADD      Operation = iota
-	MULTIPLY Operation = iota
-	CONCAT   Operation = iota
-)
+type Point struct {
+	Y int
+	X int
+}
 
 func main() {
-	b, err := os.ReadFile("day_7_input.txt")
+	b, err := os.ReadFile("day_8_input.txt")
 	if err != nil {
 		panic(err)
 	}
@@ -27,75 +21,56 @@ func main() {
 	lines := strings.Split(input, "\n")
 	lines = lines[0 : len(lines)-1]
 
-	sum := 0
+	groups := map[string][]Point{}
 
-	for _, line := range lines {
-		numbers := scan.Numbers(line)
-		goal := numbers[0]
-		operands := numbers[1:]
+	for y, line := range lines {
+		for x, char := range line {
+			if string(char) == "." {
+				continue
+			}
+			groups[string(char)] = append(groups[string(char)], Point{Y: y, X: x})
+		}
+	}
 
-		possibilities := DoOperation(ADD, operands, 0)
+	mapHeight := len(lines)
+	mapWidth := len(lines[0])
 
-		for _, possibility := range possibilities {
-			if possibility == goal {
-				sum += goal
-				break
+	antinodes := []Point{}
+
+	for _, antennas := range groups {
+		for i := 0; i < len(antennas)-1; i++ {
+			for j := i + 1; j < len(antennas); j++ {
+				first := antennas[i]
+				second := antennas[j]
+
+				antinodes = append(antinodes, first)
+				antinodes = append(antinodes, second)
+
+				distY := second.Y - first.Y
+				distX := second.X - first.X
+
+				antinode1 := Point{Y: second.Y + distY, X: second.X + distX}
+				for antinode1.X >= 0 && antinode1.X < mapWidth && antinode1.Y >= 0 && antinode1.Y < mapHeight {
+					antinodes = append(antinodes, antinode1)
+					antinode1 = Point{Y: antinode1.Y + distY, X: antinode1.X + distX}
+				}
+
+				distX = distX * -1
+				distY = distY * -1
+
+				antinode2 := Point{Y: first.Y + distY, X: first.X + distX}
+				for antinode2.X >= 0 && antinode2.X < mapWidth && antinode2.Y >= 0 && antinode2.Y < mapHeight {
+					antinodes = append(antinodes, antinode2)
+					antinode2 = Point{Y: antinode2.Y + distY, X: antinode2.X + distX}
+				}
 			}
 		}
 	}
-	fmt.Println(sum)
-}
 
-func DoOperation(op Operation, operands []int, sum int) []int {
-	if len(operands) == 1 {
-		switch op {
-		case MULTIPLY:
-			return []int{sum * operands[0]}
-		case ADD:
-			return []int{sum + operands[0]}
-		case CONCAT:
-			first := strconv.Itoa(sum)
-			second := strconv.Itoa(operands[0])
-			combined, err := strconv.Atoi(first + second)
-
-			if err != nil {
-				return []int{}
-			}
-
-			return []int{combined}
-		}
+	seen := map[Point]int{}
+	for _, antinode := range antinodes {
+		seen[antinode]++
 	}
 
-	switch op {
-	case MULTIPLY:
-		result := sum * operands[0]
-
-		option1 := DoOperation(MULTIPLY, operands[1:], result)
-		option2 := DoOperation(ADD, operands[1:], result)
-		option3 := DoOperation(CONCAT, operands[1:], result)
-		return slices.Concat(option1, option2, option3)
-	case ADD:
-		result := sum + operands[0]
-
-		option1 := DoOperation(MULTIPLY, operands[1:], result)
-		option2 := DoOperation(ADD, operands[1:], result)
-		option3 := DoOperation(CONCAT, operands[1:], result)
-		return slices.Concat(option1, option2, option3)
-	case CONCAT:
-		first := strconv.Itoa(sum)
-		second := strconv.Itoa(operands[0])
-
-		combined, err := strconv.Atoi(first + second)
-
-		if err != nil {
-			return []int{}
-		}
-
-		option1 := DoOperation(MULTIPLY, operands[1:], combined)
-		option2 := DoOperation(ADD, operands[1:], combined)
-		option3 := DoOperation(CONCAT, operands[1:], combined)
-		return slices.Concat(option1, option2, option3)
-	}
-
-	panic("unknown op")
+	fmt.Println(len(seen))
 }
