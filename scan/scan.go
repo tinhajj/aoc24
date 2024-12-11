@@ -36,3 +36,29 @@ func Numbers(input string) []int {
 
 	return nums
 }
+
+// DigitMatrix scans for a rectangle of single digit numbers
+func DigitMatrix(input []string, charTransform func(s string) int) (matrix [][]int, height int, width int) {
+	matrix = [][]int{}
+
+	for i, line := range input {
+		if line == "" {
+			continue
+		}
+		matrix = append(matrix, []int{})
+		for _, c := range line {
+			number, err := strconv.Atoi(string(c))
+			if err != nil {
+				if charTransform != nil {
+					r := charTransform(string(c))
+					matrix[i] = append(matrix[i], r)
+					continue
+				}
+				panic(err)
+			}
+			matrix[i] = append(matrix[i], number)
+		}
+	}
+
+	return matrix, len(matrix), len(matrix[0])
+}
