@@ -62,3 +62,20 @@ func DigitMatrix(input []string, charTransform func(s string) int) (matrix [][]i
 
 	return matrix, len(matrix), len(matrix[0])
 }
+
+// RuneMatrix scans for a rectangle of single runes
+func RuneMatrix(input []string) (matrix [][]string, height int, width int) {
+	matrix = [][]string{}
+
+	for i, line := range input {
+		if line == "" {
+			continue
+		}
+		matrix = append(matrix, []string{})
+		for _, c := range line {
+			matrix[i] = append(matrix[i], string(c))
+		}
+	}
+
+	return matrix, len(matrix), len(matrix[0])
+}

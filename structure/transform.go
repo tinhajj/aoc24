@@ -10,20 +10,43 @@ type VertexInt struct {
 	Val   int
 }
 
-func VertexMatrixInt(digiMatrix [][]int) [][]*VertexInt {
-	vertMatrix := [][]*VertexInt{}
+type VertexStr struct {
+	Point Point
+	Val   string
+}
 
-	for i, digiRow := range digiMatrix {
-		vertRow := []*VertexInt{}
-		for j, digi := range digiRow {
-			v := &VertexInt{
+func VertexMatrixStr(m [][]string) [][]*VertexStr {
+	matrix := [][]*VertexStr{}
+
+	for i, r := range m {
+		row := []*VertexStr{}
+		for j, str := range r {
+			v := &VertexStr{
 				Point: Point{Y: i, X: j},
-				Val:   digi,
+				Val:   str,
 			}
-			vertRow = append(vertRow, v)
+			row = append(row, v)
 		}
-		vertMatrix = append(vertMatrix, vertRow)
+		matrix = append(matrix, row)
 	}
 
-	return vertMatrix
+	return matrix
+}
+
+func VertexMatrixInt(m [][]int) [][]*VertexInt {
+	matrix := [][]*VertexInt{}
+
+	for i, r := range m {
+		row := []*VertexInt{}
+		for j, digit := range r {
+			v := &VertexInt{
+				Point: Point{Y: i, X: j},
+				Val:   digit,
+			}
+			row = append(row, v)
+		}
+		matrix = append(matrix, row)
+	}
+
+	return matrix
 }
