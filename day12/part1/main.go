@@ -8,10 +8,16 @@ import (
 	"strings"
 )
 
-type 
+type dimension struct {
+	plant     string
+	perimeter int
+	area      int
+}
+
+var debug = false
 
 func main() {
-	b, err := os.ReadFile("day_12_sample_input.txt")
+	b, err := os.ReadFile("day_12_input.txt")
 	if err != nil {
 		panic(err)
 	}
@@ -49,7 +55,11 @@ func main() {
 		}
 	}
 
+	// debug
 	for k, v := range adjMap {
+		if !debug {
+			continue
+		}
 		fmt.Printf("Vertex: (%+v) %+v\n", k.Point, k.Val)
 
 		fmt.Printf("Adjacents: ")
@@ -60,16 +70,43 @@ func main() {
 		fmt.Println("")
 	}
 
-	corner := matrix[0][0]
+	visited := []*st.VertexStr{}
+	regions := []dimension{}
 
-	regions := map[string]int{}
+	for _, row := range matrix {
+		for _, v := range row {
+			seen := false
+			for _, visit := range visited {
+				if visit == v {
+					seen = true
+					break
+				}
+			}
+			if seen {
+				continue
+			}
 
-	found, area, perimeter := bfs(height, width, adjMap, corner)
-	fmt.Println(found, area, perimeter)
-	// for _, v := range found {
-	// 	fmt.Printf("%+v ", v)
-	// }
-	fmt.Println()
+			letter := v.Val
+
+			found, area, perimeter := bfs(height, width, adjMap, v)
+			visited = append(visited, found...)
+
+			regions = append(regions, dimension{
+				plant:     letter,
+				perimeter: perimeter,
+				area:      area,
+			})
+		}
+	}
+
+	sum := 0
+	for _, v := range regions {
+		if debug {
+			fmt.Printf("%s area %d * perimeter %d\n", v.plant, v.area, v.perimeter)
+		}
+		sum += v.area * v.perimeter
+	}
+	fmt.Println(sum)
 }
 
 func bfs(matrixH, matrixW int, adjMap map[*st.VertexStr][]*st.VertexStr, start *st.VertexStr) (found []*st.VertexStr, a, p int) {
