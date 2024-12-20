@@ -8,7 +8,17 @@ import (
 	"strings"
 )
 
+type direction int
+
+const (
+	UP    direction = iota
+	DOWN  direction = iota
+	LEFT  direction = iota
+	RIGHT direction = iota
+)
+
 type dimension struct {
+	bumps     map[direction]map[*st.VertexStr]bool
 	vertices  []*st.VertexStr
 	plant     string
 	perimeter int
@@ -18,7 +28,7 @@ type dimension struct {
 var debug = false
 
 func main() {
-	b, err := os.ReadFile("day_12_sample_input.txt")
+	b, err := os.ReadFile("day_12_input.txt")
 	if err != nil {
 		panic(err)
 	}
@@ -89,10 +99,11 @@ func main() {
 
 			letter := v.Val
 
-			found, area, perimeter := bfs(height, width, adjMap, v)
+			bumps, found, area, perimeter := bfs(height, width, adjMap, v)
 			visited = append(visited, found...)
 
 			regions = append(regions, dimension{
+				bumps:     bumps,
 				vertices:  found,
 				plant:     letter,
 				perimeter: perimeter,
@@ -103,44 +114,26 @@ func main() {
 
 	sum := 0
 	for _, dim := range regions {
-		fmt.Printf("%s area %d * perimeter %d\n", dim.plant, dim.area, dim.perimeter)
-		sum += dim.area * dim.perimeter
-		fmt.Print("vertices: ")
-		for _, v := range dim.vertices {
-			fmt.Printf("%s (y: %d, x: %d), ", v.Val, v.Point.Y, v.Point.X)
+		sides := sides(dim, adjMap)
+		sum += dim.area * sides
+
+		if debug {
+			fmt.Printf("%s area %d * perimeter %d sides: %d\n", dim.plant, dim.area, dim.perimeter, sides)
+			fmt.Print("vertices: ")
+			for _, v := range dim.vertices {
+				fmt.Printf("%s (y: %d, x: %d), ", v.Val, v.Point.Y, v.Point.X)
+			}
+			fmt.Println()
 		}
-		fmt.Println()
 	}
 
 	fmt.Println(sum)
 }
 
-func dfs(matrixH, matrixW int, adjMap map[*st.VertexStr][]*st.VertexStr, start *st.VertexStr, visited map[*st.VertexStr]bool, sides int) (map[*st.VertexStr]bool, int) {
-	if len(visited) == 0 {
-		sides += 3
-	}
-	visited[start] = true
-
-	neighbours := adjMap[start]
-	adjs := []*st.VertexStr{}
-	for _, n := range neighbours {
-		if n.Val == start.Val {
-			adjs = append(adjs, n)
-		}
-	}
-
-	for _, a := range adjs {
-		_, ok := visited[a]
-		if ok {
-			continue
-		}
-
-	}
-}
-
-func bfs(matrixH, matrixW int, adjMap map[*st.VertexStr][]*st.VertexStr, start *st.VertexStr) (found []*st.VertexStr, a, p int) {
+func bfs(matrixH, matrixW int, adjMap map[*st.VertexStr][]*st.VertexStr, start *st.VertexStr) (bumps map[direction]map[*st.VertexStr]bool, found []*st.VertexStr, a, p int) {
 	a = 0
 	p = 0
+	bumps = map[direction]map[*st.VertexStr]bool{UP: {}, DOWN: {}, LEFT: {}, RIGHT: {}}
 
 	var queue []*st.VertexStr
 	visited := make(map[*st.VertexStr]bool)
@@ -157,21 +150,39 @@ func bfs(matrixH, matrixW int, adjMap map[*st.VertexStr][]*st.VertexStr, start *
 		}
 		if next.Point.X == 0 {
 			p++
+			bumps[LEFT][next] = false
 		}
 		if next.Point.Y == 0 {
 			p++
+			bumps[UP][next] = false
 		}
 		if next.Point.X == matrixW-1 {
 			p++
+			bumps[RIGHT][next] = false
 		}
 		if next.Point.Y == matrixH-1 {
 			p++
+			bumps[DOWN][next] = false
 		}
 
 		for _, neighbour := range adjMap[next] {
 			if ok := visited[neighbour]; !ok {
 				if neighbour.Val != start.Val {
 					p++
+
+					if neighbour.Point.X > next.Point.X {
+						bumps[RIGHT][next] = false
+					}
+					if neighbour.Point.X < next.Point.X {
+						bumps[LEFT][next] = false
+					}
+					if neighbour.Point.Y > next.Point.Y {
+						bumps[DOWN][next] = false
+					}
+					if neighbour.Point.Y < next.Point.Y {
+						bumps[UP][next] = false
+					}
+
 					continue
 				}
 
@@ -188,5 +199,59 @@ func bfs(matrixH, matrixW int, adjMap map[*st.VertexStr][]*st.VertexStr, start *
 		}
 	}
 
-	return found, a, p
+	return bumps, found, a, p
+}
+
+func sides(dim dimension, adjMap map[*st.VertexStr][]*st.VertexStr) int {
+	//if ok := visited[neighbour]; !ok && in(neighbour, bumps) {
+	bumps := dim.bumps
+	directions := []direction{UP, DOWN, LEFT, RIGHT}
+
+	sides := 0
+
+	unvisited := func(d direction) *st.VertexStr {
+		bumps := bumps[d]
+		for k, v := range bumps {
+			if !v {
+				return k
+			}
+		}
+		return nil
+	}
+
+	for _, d := range directions {
+		for start := unvisited(d); start != nil; start = unvisited(d) {
+			var queue []*st.VertexStr
+			visited := make(map[*st.VertexStr]bool)
+
+			visited[start] = true
+			queue = append(queue, start)
+
+			for len(queue) > 0 {
+				next := queue[0]
+				queue = queue[1:]
+
+				for _, neighbour := range adjMap[next] {
+					if ok := visited[neighbour]; !ok && in(neighbour, bumps[d]) {
+						visited[neighbour] = true
+						queue = append(queue, neighbour)
+					}
+				}
+			}
+
+			for k, _ := range visited {
+				bumps[d][k] = true
+			}
+			sides++
+		}
+	}
+	return sides
+}
+
+func in(needle *st.VertexStr, haystack map[*st.VertexStr]bool) bool {
+	v, ok := haystack[needle]
+	if ok && !v {
+		return true
+	}
+	return false
 }
