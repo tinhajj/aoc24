@@ -162,6 +162,7 @@ func main() {
 
 	lowestSafetyFactor := math.MaxInt
 	imagesWritten := 0
+	fmt.Println("Look for trees in written images")
 	for i := 1; true; i++ {
 		if imagesWritten > IMAGELIMIT {
 			log.Fatalln("written the maximum number of images")
@@ -178,7 +179,7 @@ func main() {
 
 			fileName := fmt.Sprintf("output/second-%d.png", i)
 			QuadrantImage(ROBOTS, fileName)
-			fmt.Printf("Image %s Written\n", fileName)
+			fmt.Printf("Image %s written\n", fileName)
 			imagesWritten++
 		}
 	}
