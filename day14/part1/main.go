@@ -77,12 +77,6 @@ func RobotInQuadrant(r Robot, q Quadrant) bool {
 }
 
 func main() {
-	// NOTE: Might not need a matrix, it would just be a good data structure to print out a visual?
-	ROOM := make([][]int, HEIGHT)
-	for i := range ROOM {
-		ROOM[i] = make([]int, WIDTH)
-	}
-
 	var b []byte
 	var err error
 
