@@ -7,8 +7,9 @@ import (
 )
 
 var (
-	debug  = true
-	sample = true
+	debug   = false
+	sample  = false
+	Vec2Nil = Vec2{-1, -1}
 )
 
 type Vec2 struct {
@@ -95,32 +96,122 @@ func main() {
 		}
 	}
 
-	fmt.Println(start)
+	if debug {
+		fmt.Println("start")
+		print(grid)
+	}
+	currentPosition := start
+
+	for _, direction := range directions {
+		if debug {
+			fmt.Println("step", direction)
+		}
+
+		ok := canMove(direction, currentPosition, map[Vec2]bool{}, grid)
+		if ok {
+			currentPosition = move(direction, currentPosition, map[Vec2]bool{}, grid)
+		}
+
+		if debug {
+			print(grid)
+		}
+	}
+
+	sum := 0
+	for y, row := range grid {
+		for x, val := range row {
+			if val != "[" {
+				continue
+			}
+			sum += (y * 100) + x
+		}
+	}
+	fmt.Println(sum)
+}
+
+func print(grid [][]string) {
 	for _, row := range grid {
 		fmt.Println(row)
 	}
 }
 
-func move(direction, position Vec2, grid [][]string) (ableToMove bool, next Vec2) {
-	currentVal := grid[position.Y][position.X]
+func move(direction, position Vec2, memo map[Vec2]bool, grid [][]string) Vec2 {
+	_, ok := memo[position]
+	if ok {
+		return Vec2{}
+	}
+
+	currentValue := grid[position.Y][position.X]
+	nextPosition := position.Add(direction)
+
+	if grid[nextPosition.Y][nextPosition.X] == "." {
+		grid[nextPosition.Y][nextPosition.X] = currentValue
+		grid[position.Y][position.X] = "."
+
+		memo[position] = true
+		return nextPosition
+	}
+
+	// must be "[,]", try and move it before we move this
+	nextVal := grid[nextPosition.Y][nextPosition.X]
+	var otherSide Vec2
+
+	if nextVal == "[" {
+		otherSide = nextPosition.Add(Vec2{1, 0})
+	} else {
+		otherSide = nextPosition.Add(Vec2{-1, 0})
+	}
+
+	move(direction, nextPosition, memo, grid)
+	move(direction, otherSide, memo, grid)
+
+	grid[nextPosition.Y][nextPosition.X] = currentValue
+	grid[position.Y][position.X] = "."
+
+	memo[position] = true
+	memo[nextPosition] = true
+	memo[otherSide] = true
+
+	return nextPosition
+}
+
+func canMove(direction, position Vec2, memo map[Vec2]bool, grid [][]string) (ableToMove bool) {
+	v, ok := memo[position]
+	if ok {
+		return v
+	}
+
 	nextPosition := position.Add(direction)
 
 	if grid[nextPosition.Y][nextPosition.X] == "#" {
-		return false, position
+		memo[position] = false
+		return false
 	}
 
 	if grid[nextPosition.Y][nextPosition.X] == "." {
-		grid[nextPosition.Y][nextPosition.X] = currentVal
-		grid[position.Y][position.X] = "."
-		return true, nextPosition
+		memo[position] = true
+		return true
 	}
 
-	// must be "O", try and move it before we move this
-	ok, _ := move(direction, nextPosition, grid)
-	if ok {
-		grid[nextPosition.Y][nextPosition.X] = currentVal
-		grid[position.Y][position.X] = "."
-		return true, nextPosition
+	// must be "[,]"
+	nextVal := grid[nextPosition.Y][nextPosition.X]
+	var otherSide Vec2 = Vec2Nil
+
+	if nextVal == "[" && direction.Y != 0 {
+		otherSide = nextPosition.Add(Vec2{1, 0})
+	} else if nextVal == "]" && direction.Y != 0 {
+		otherSide = nextPosition.Add(Vec2{-1, 0})
 	}
-	return false, position
+
+	var okOther bool = true
+
+	ok = canMove(direction, nextPosition, memo, grid)
+	memo[nextPosition] = ok
+
+	if otherSide != Vec2Nil {
+		okOther = canMove(direction, otherSide, memo, grid)
+		memo[otherSide] = ok
+	}
+
+	return ok && okOther
 }
