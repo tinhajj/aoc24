@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"maps"
 	"math"
 	"os"
@@ -9,8 +12,13 @@ import (
 )
 
 var (
-	debug  = true
+	debug  = false
 	sample = false
+	grid   = [][]*Cell{}
+
+	debugImageFile *os.File
+	bfsCallCounter = 0
+	skipCounter    = 0
 )
 
 type Kind int
@@ -28,6 +36,11 @@ type Cell struct {
 	Vec2
 	Value string
 	Kind  Kind
+}
+
+type Trajectory struct {
+	Location  Vec2
+	Direction Vec2
 }
 
 func (v Vec2) Add(o Vec2) Vec2 {
@@ -50,11 +63,16 @@ func main() {
 		panic(err)
 	}
 
+	debugImageFile, err = os.Create("debug.png")
+	if err != nil {
+		panic(err)
+	}
+
 	input := string(b)
 	lines := strings.Split(input, "\n")
 	lines = lines[:len(lines)-1]
 
-	grid := [][]*Cell{}
+	grid = [][]*Cell{}
 	adj := map[*Cell][]*Cell{}
 
 	for i, line := range lines {
@@ -97,7 +115,7 @@ func main() {
 	}
 
 	if debug {
-		fmt.Println("grid")
+		fmt.Println("Starting Grid")
 		for _, row := range grid {
 			for _, v := range row {
 				fmt.Printf("%s ", v.Value)
@@ -115,7 +133,7 @@ func main() {
 		}
 	}
 
-	costs := bfs(start, Vec2{1, 0}, 0, math.MaxInt, map[*Cell]bool{start: true}, adj)
+	costs, _ := bfs(start, Vec2{1, 0}, 0, map[Trajectory]int{}, map[*Cell]bool{start: true}, map[*Cell]bool{}, adj)
 	min := math.MaxInt
 	for _, c := range costs {
 		if c < min {
@@ -125,7 +143,52 @@ func main() {
 	fmt.Println(min)
 }
 
-func bfs(start *Cell, direction Vec2, currentCost int, lowestCost int, visited map[*Cell]bool, adj map[*Cell][]*Cell) []int {
+func bfs(start *Cell, direction Vec2, currentCost int, lowestCosts map[Trajectory]int, visited map[*Cell]bool, deadEnds map[*Cell]bool, adj map[*Cell][]*Cell) (costs []int, deadEnd bool) {
+	bfsCallCounter++
+
+	if bfsCallCounter%10_000 == 0 && debug {
+		fmt.Println("Skips: ", skipCounter)
+
+		debugImageFile.Truncate(0)
+		debugImageFile.Seek(0, 0)
+
+		width, height := len(grid), len(grid[0])
+		img := image.NewRGBA(image.Rect(0, 0, width, height))
+
+		blue := color.RGBA{R: 0, G: 0, B: 255, A: 255}
+		red := color.RGBA{R: 255, G: 0, B: 0, A: 255}
+		green := color.RGBA{R: 0, G: 255, B: 0, A: 255}
+		black := color.RGBA{R: 0, G: 0, B: 0, A: 255}
+		yellow := color.RGBA{R: 255, G: 0, B: 255, A: 255}
+
+		for y := 0; y < height; y++ {
+			for x := 0; x < width; x++ {
+				img.Set(x, y, blue)
+			}
+		}
+
+		for y, row := range grid {
+			for x, cell := range row {
+				if cell == start {
+					img.Set(x, y, blue)
+				} else if cell.Value == "E" {
+					img.Set(x, y, yellow)
+				} else if cell.Kind == Wall {
+					img.Set(x, y, black)
+				} else if visited[cell] {
+					img.Set(x, y, red)
+				} else {
+					img.Set(x, y, green)
+				}
+			}
+		}
+		err := png.Encode(debugImageFile, img)
+		if err != nil {
+			panic(err)
+		}
+		debugImageFile.Sync()
+	}
+
 	queue := []*Cell{start}
 
 	var current *Cell
@@ -133,7 +196,7 @@ func bfs(start *Cell, direction Vec2, currentCost int, lowestCost int, visited m
 		current, queue = queue[0], queue[1:]
 
 		if current.Value == "E" {
-			return []int{currentCost}
+			return []int{currentCost}, false
 		}
 		visited[current] = true
 
@@ -141,8 +204,9 @@ func bfs(start *Cell, direction Vec2, currentCost int, lowestCost int, visited m
 		neighbors := []*Cell{}
 
 		for _, n := range n {
-			_, ok := visited[n]
-			if !ok {
+			_, alreadyVisited := visited[n]
+			_, deadEnd := deadEnds[n]
+			if !alreadyVisited && !deadEnd {
 				neighbors = append(neighbors, n)
 			}
 		}
@@ -156,32 +220,53 @@ func bfs(start *Cell, direction Vec2, currentCost int, lowestCost int, visited m
 				newDirection, expense := calculate(direction, current, neighbor)
 				newCost := currentCost + expense
 
-				if newCost > lowestCost {
-					continue // give up
+				// Initialize cost
+				if _, ok := lowestCosts[Trajectory{Location: neighbor.Vec2, Direction: newDirection}]; !ok {
+					lowestCosts[Trajectory{Location: neighbor.Vec2, Direction: newDirection}] = math.MaxInt
 				}
 
-				costs = append(costs, bfs(neighbor, newDirection, currentCost+expense, lowestCost, new, adj)...)
-				for _, c := range costs {
-					if c < lowestCost {
-						lowestCost = c
-					}
+				if newCost < lowestCosts[Trajectory{Location: neighbor.Vec2, Direction: newDirection}] {
+					lowestCosts[Trajectory{Location: current.Vec2, Direction: newDirection}] = newCost
+				} else {
+					skipCounter++
+					continue
+				}
+
+				cs, deadEnd := bfs(neighbor, newDirection, currentCost+expense, lowestCosts, new, deadEnds, adj)
+				costs = append(costs, cs...)
+
+				if deadEnd {
+					deadEnds[neighbor] = true
 				}
 			}
-			return costs
+			return costs, false
 		} else {
 			queue = append(queue, neighbors...)
 			if len(neighbors) > 0 {
 				newDirection, expense := calculate(direction, current, neighbors[0])
-
 				currentCost = expense + currentCost
-				if currentCost > lowestCost {
-					return []int{} // give up
+
+				// Initialize cost
+				if _, ok := lowestCosts[Trajectory{Location: current.Vec2, Direction: newDirection}]; !ok {
+					lowestCosts[Trajectory{Location: current.Vec2, Direction: newDirection}] = math.MaxInt
 				}
+
+				if currentCost < lowestCosts[Trajectory{Location: current.Vec2, Direction: newDirection}] {
+					lowestCosts[Trajectory{Location: current.Vec2, Direction: newDirection}] = currentCost
+				} else {
+					skipCounter++
+					return []int{}, false // give up
+				}
+
 				direction = newDirection
 			}
 		}
 	}
-	return []int{}
+	var lonely bool
+	if len(adj[current]) < 2 {
+		lonely = true
+	}
+	return []int{}, lonely
 }
 
 func calculate(direction Vec2, current *Cell, next *Cell) (newDirection Vec2, cost int) {
