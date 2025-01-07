@@ -13,7 +13,7 @@ import (
 
 var (
 	DEBUG  = false
-	SAMPLE = true
+	SAMPLE = false
 	GRID   = [][]*Cell{}
 
 	VALIDPATHS = []Path{}
@@ -160,17 +160,20 @@ func main() {
 			}
 		}
 
-		for _, row := range GRID {
-			for _, c := range row {
-				if path.Visited[c] {
-					fmt.Printf("O")
-				} else if c.Kind == Wall {
-					fmt.Printf("#")
-				} else {
-					fmt.Printf(".")
+		if DEBUG {
+			fmt.Println("Valid Path:")
+			for _, row := range GRID {
+				for _, c := range row {
+					if path.Visited[c] {
+						fmt.Printf("O")
+					} else if c.Kind == Wall {
+						fmt.Printf("#")
+					} else {
+						fmt.Printf(".")
+					}
 				}
+				fmt.Println()
 			}
-			fmt.Println()
 		}
 	}
 
@@ -258,6 +261,32 @@ func bfs(start *Cell, direction Vec2, currentCost int, lowestCosts map[Trajector
 			}
 		}
 
+		if DEBUG {
+			if len(neighbors) > 1 {
+				for _, row := range GRID {
+				row:
+					for _, c := range row {
+						for _, n := range neighbors {
+							if c == n {
+								fmt.Printf("N")
+								continue row
+							}
+						}
+						if visited[c] {
+							fmt.Printf("O")
+						} else if c == current {
+							fmt.Printf("@")
+						} else if c.Kind == Wall {
+							fmt.Printf("#")
+						} else {
+							fmt.Printf(".")
+						}
+					}
+					fmt.Println()
+				}
+			}
+		}
+
 		if len(neighbors) > 1 {
 			costs := []int{}
 			for _, neighbor := range neighbors {
@@ -272,7 +301,7 @@ func bfs(start *Cell, direction Vec2, currentCost int, lowestCosts map[Trajector
 					lowestCosts[Trajectory{Location: neighbor.Vec2, Direction: newDirection}] = math.MaxInt
 				}
 
-				if newCost < lowestCosts[Trajectory{Location: neighbor.Vec2, Direction: newDirection}] {
+				if newCost <= lowestCosts[Trajectory{Location: neighbor.Vec2, Direction: newDirection}] {
 					lowestCosts[Trajectory{Location: current.Vec2, Direction: newDirection}] = newCost
 				} else {
 					SkipCounter++
@@ -294,12 +323,12 @@ func bfs(start *Cell, direction Vec2, currentCost int, lowestCosts map[Trajector
 				currentCost = expense + currentCost
 
 				// Initialize cost
-				if _, ok := lowestCosts[Trajectory{Location: current.Vec2, Direction: newDirection}]; !ok {
-					lowestCosts[Trajectory{Location: current.Vec2, Direction: newDirection}] = math.MaxInt
+				if _, ok := lowestCosts[Trajectory{Location: neighbors[0].Vec2, Direction: newDirection}]; !ok {
+					lowestCosts[Trajectory{Location: neighbors[0].Vec2, Direction: newDirection}] = math.MaxInt
 				}
 
-				if currentCost < lowestCosts[Trajectory{Location: current.Vec2, Direction: newDirection}] {
-					lowestCosts[Trajectory{Location: current.Vec2, Direction: newDirection}] = currentCost
+				if currentCost <= lowestCosts[Trajectory{Location: neighbors[0].Vec2, Direction: newDirection}] {
+					lowestCosts[Trajectory{Location: neighbors[0].Vec2, Direction: newDirection}] = currentCost
 				} else {
 					SkipCounter++
 					return []int{}, false // give up
