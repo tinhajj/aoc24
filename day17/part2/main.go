@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	DEBUG  = false
+	DEBUG  = true
 	SAMPLE = false
 )
 
@@ -65,31 +65,27 @@ func main() {
 	RegisterA := 1433100000
 
 	for ; !equal(computer.Output, initial.Program); RegisterA++ {
+		fmt.Println("New Computer")
 		if RegisterA%100_000 == 0 {
 			fmt.Println("RegisterA:", RegisterA)
 		}
 		computer = initial
 		computer.RegisterA = RegisterA
 
-		if DEBUG {
+		if DEBUG && false {
 			fmt.Println("Initial Registers")
 			fmt.Println(computer.RegisterA, computer.RegisterB, computer.RegisterC, computer.Program)
 			fmt.Println()
 		}
 
 		for computer.IP < len(computer.Program) {
-			HandleInstruction(&computer)
+			fmt.Println(HandleInstruction(&computer))
 		}
 
-		if DEBUG {
+		if DEBUG && false {
 			fmt.Println("Final Registers")
 			fmt.Println(computer.RegisterA, computer.RegisterB, computer.RegisterC, computer.Program)
 			fmt.Println()
-		}
-
-		if len(computer.Output) == 0 {
-			fmt.Println("No output")
-			return
 		}
 
 		if DEBUG {
@@ -106,7 +102,9 @@ func main() {
 	fmt.Println(RegisterA - 1)
 }
 
-func HandleInstruction(computer *Computer) {
+func HandleInstruction(computer *Computer) (debug string) {
+	sb := strings.Builder{}
+
 	instruction := computer.Program[computer.IP]
 	computer.IP++
 
@@ -118,34 +116,42 @@ func HandleInstruction(computer *Computer) {
 		computer.RegisterA = int(
 			float64(op1) / math.Pow(2.0, float64(op2)),
 		)
+		sb.WriteString(fmt.Sprintf("adv RegisterA, %d", op2))
 	case 1: // bxl
 		ops := Operands(computer, OpRegisterB, OpLit)
 		op1, op2 := ops[0], ops[1]
 
 		computer.RegisterB = op1 ^ op2
+		sb.WriteString(fmt.Sprintf("bxl RegisterB, %d", op2))
 	case 2: // bst
 		ops := Operands(computer, OpCombo)
 		op1 := ops[0]
 
 		computer.RegisterB = op1 % 8
+		sb.WriteString(fmt.Sprintf("bst RegisterB, %d", op1))
 	case 3: // jnz
 		if computer.RegisterA == 0 {
 			Operands(computer, OpLit)
-			return
+
+			sb.WriteString("jnz SKIPPED")
 		} else {
 			ops := Operands(computer, OpLit)
 			op1 := ops[0]
 
 			computer.IP = op1
+			sb.WriteString(fmt.Sprintf("jnz %d", op1))
 		}
 	case 4: // bxc
 		Operands(computer, OpLit)
 		computer.RegisterB = computer.RegisterB ^ computer.RegisterC
+
+		sb.WriteString("bxc RegisterB, RegisterC")
 	case 5: // out
 		ops := Operands(computer, OpCombo)
 		op1 := ops[0]
 
 		computer.Output = append(computer.Output, op1%8)
+		sb.WriteString(fmt.Sprintf("out %d", op1))
 	case 6: // bdv
 		ops := Operands(computer, OpRegisterA, OpCombo)
 		op1, op2 := ops[0], ops[1]
@@ -153,6 +159,7 @@ func HandleInstruction(computer *Computer) {
 		computer.RegisterB = int(
 			float64(op1) / math.Pow(2.0, float64(op2)),
 		)
+		sb.WriteString(fmt.Sprintf("bdv RegisterB, %d", op2))
 	case 7: // cdv
 		ops := Operands(computer, OpRegisterA, OpCombo)
 		op1, op2 := ops[0], ops[1]
@@ -160,7 +167,10 @@ func HandleInstruction(computer *Computer) {
 		computer.RegisterC = int(
 			float64(op1) / math.Pow(2.0, float64(op2)),
 		)
+		sb.WriteString(fmt.Sprintf("cdv RegisterC, %d", op2))
 	}
+
+	return sb.String()
 }
 
 func Operands(computer *Computer, opKinds ...OpKind) []int {
