@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	DEBUG  = true
+	DEBUG  = false
 	SAMPLE = false
 )
 
@@ -148,11 +148,10 @@ func Worker(id int, initial Computer, work chan Scope, done chan int, wg *sync.W
 
 			fmt.Println("New Computer")
 			for computer.IP < len(computer.Program) {
-				d := HandleInstruction(&computer, opValScratch, opKindScratch)
-				fmt.Println(d)
-				// if !equalPre(computer.Output, initial.Program) {
-				// 	continue
-				// }
+				HandleInstruction(&computer, opValScratch, opKindScratch)
+				if !equalPre(computer.Output, initial.Program) {
+					continue
+				}
 			}
 
 			if equal(computer.Output, initial.Program) {
