@@ -8,18 +8,24 @@ import (
 	"os/signal"
 	"runtime/pprof"
 	"strings"
+	"sync"
 	"syscall"
 )
 
 const (
-	DEBUG  = false
+	DEBUG  = true
 	SAMPLE = false
 )
 
 var (
+	Initial            Computer
 	InitialProgramSize int
-	OperandScratch     [2]int
 )
+
+type Scope struct {
+	Start int
+	End   int
+}
 
 type Computer struct {
 	IP int
@@ -36,7 +42,8 @@ type Computer struct {
 type OpKind int
 
 const (
-	OpLit OpKind = iota
+	OpNil OpKind = iota
+	OpLit
 	OpCombo
 
 	OpRegisterA
@@ -48,16 +55,18 @@ func main() {
 	var b []byte
 	var err error
 
-	f, _ := os.Create("cpu.prof")
-	pprof.StartCPUProfile(f)
+	if DEBUG {
+		f, _ := os.Create("cpu.prof")
+		pprof.StartCPUProfile(f)
 
-	c := make(chan os.Signal)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-c
-		pprof.StopCPUProfile()
-		os.Exit(1)
-	}()
+		c := make(chan os.Signal)
+		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			<-c
+			pprof.StopCPUProfile()
+			os.Exit(1)
+		}()
+	}
 
 	if SAMPLE {
 		b, err = os.ReadFile("day_17_sample_input.txt")
@@ -72,7 +81,7 @@ func main() {
 	lines := strings.Split(input, "\n")
 	lines = lines[:len(lines)-1]
 
-	initial := Computer{
+	Initial := Computer{
 		IP:        0,
 		RegisterA: scan.Numbers(lines[0])[0],
 		RegisterB: scan.Numbers(lines[1])[0],
@@ -80,55 +89,81 @@ func main() {
 		Program:   scan.Numbers(lines[4]),
 	}
 
-	InitialProgramSize = len(initial.Program)
+	InitialProgramSize = len(Initial.Program)
 
-	var computer Computer
-	RegisterA := 1460100000
+	RegisterA := 0
 
-	for ; !equal(computer.Output, initial.Program); RegisterA++ {
-		if DEBUG && false {
-			fmt.Println("New Computer")
-		}
-		if RegisterA%100_000 == 0 {
-			fmt.Println("RegisterA:", RegisterA)
-		}
-		computer = initial
-		computer.RegisterA = RegisterA
+	workerCount := 1
+	workC := make(chan Scope, workerCount)
+	doneC := make(chan int, workerCount)
 
-		if DEBUG && false {
-			fmt.Println("Initial Registers")
-			fmt.Println(computer.RegisterA, computer.RegisterB, computer.RegisterC, computer.Program)
-			fmt.Println()
-		}
-
-		for computer.IP < len(computer.Program) {
-			HandleInstruction(&computer)
-			if !equalPre(computer.Output, initial.Program) {
-				continue
-			}
-		}
-
-		if DEBUG && false {
-			fmt.Println("Final Registers")
-			fmt.Println(computer.RegisterA, computer.RegisterB, computer.RegisterC, computer.Program)
-			fmt.Println()
-		}
-
-		if DEBUG && false {
-			fmt.Println("Output")
-			i := 0
-			for ; i < len(computer.Output)-1; i++ {
-				fmt.Printf("%d,", computer.Output[i])
-			}
-			fmt.Printf("%d", computer.Output[i])
-			fmt.Println()
-		}
+	wg := &sync.WaitGroup{}
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go Worker(i, Initial, workC, doneC, wg)
 	}
 
-	fmt.Println("Answer:", RegisterA-1)
+	var answer int
+	go func() {
+		for {
+			select {
+			case answer = <-doneC:
+				close(workC)
+				return
+			default:
+				size := 10_000_000
+				scope := Scope{
+					Start: RegisterA,
+					End:   RegisterA + size,
+				}
+				RegisterA += size
+
+				workC <- scope
+			}
+		}
+	}()
+
+	wg.Wait()
+
+	fmt.Println("Answer:", answer)
+
 }
 
-func HandleInstruction(computer *Computer) (debug string) {
+func Worker(id int, initial Computer, work chan Scope, done chan int, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	opValScratch := [2]int{}
+	opKindScratch := [2]OpKind{}
+
+	for scope := range work {
+		for i := scope.Start; i <= scope.End; i++ {
+			regA := i
+
+			if regA%10_000_000 == 0 {
+				fmt.Printf("Worker %d, Scope: %d\n", id, scope)
+			}
+
+			computer := initial
+			computer.RegisterA = regA
+
+			fmt.Println("New Computer")
+			for computer.IP < len(computer.Program) {
+				d := HandleInstruction(&computer, opValScratch, opKindScratch)
+				fmt.Println(d)
+				// if !equalPre(computer.Output, initial.Program) {
+				// 	continue
+				// }
+			}
+
+			if equal(computer.Output, initial.Program) {
+				done <- regA
+				return
+			}
+		}
+	}
+}
+
+func HandleInstruction(computer *Computer, opValScratch [2]int, opKindScratch [2]OpKind) (debug string) {
 	sb := strings.Builder{}
 
 	instruction := computer.Program[computer.IP]
@@ -136,7 +171,9 @@ func HandleInstruction(computer *Computer) (debug string) {
 
 	switch instruction {
 	case 0: // adv
-		ops := Operands(computer, OpRegisterA, OpCombo)
+		opKindScratch[0], opKindScratch[1] = OpRegisterA, OpCombo
+		ops := Operands(computer, opValScratch, opKindScratch)
+
 		op1, op2 := ops[0], ops[1]
 
 		computer.RegisterA = int(
@@ -146,7 +183,8 @@ func HandleInstruction(computer *Computer) (debug string) {
 			sb.WriteString(fmt.Sprintf("adv RegisterA, %d", op2))
 		}
 	case 1: // bxl
-		ops := Operands(computer, OpRegisterB, OpLit)
+		opKindScratch[0], opKindScratch[1] = OpRegisterB, OpLit
+		ops := Operands(computer, opValScratch, opKindScratch)
 		op1, op2 := ops[0], ops[1]
 
 		computer.RegisterB = op1 ^ op2
@@ -154,7 +192,8 @@ func HandleInstruction(computer *Computer) (debug string) {
 			sb.WriteString(fmt.Sprintf("bxl RegisterB, %d", op2))
 		}
 	case 2: // bst
-		ops := Operands(computer, OpCombo)
+		opKindScratch[0], opKindScratch[1] = OpCombo, OpNil
+		ops := Operands(computer, opValScratch, opKindScratch)
 		op1 := ops[0]
 
 		computer.RegisterB = op1 % 8
@@ -163,13 +202,15 @@ func HandleInstruction(computer *Computer) (debug string) {
 		}
 	case 3: // jnz
 		if computer.RegisterA == 0 {
-			Operands(computer, OpLit)
+			opKindScratch[0], opKindScratch[1] = OpLit, OpNil
+			Operands(computer, opValScratch, opKindScratch)
 
 			if DEBUG {
 				sb.WriteString("jnz SKIPPED")
 			}
 		} else {
-			ops := Operands(computer, OpLit)
+			opKindScratch[0], opKindScratch[1] = OpLit, OpNil
+			ops := Operands(computer, opValScratch, opKindScratch)
 			op1 := ops[0]
 
 			computer.IP = op1
@@ -178,14 +219,16 @@ func HandleInstruction(computer *Computer) (debug string) {
 			}
 		}
 	case 4: // bxc
-		Operands(computer, OpLit)
+		opKindScratch[0], opKindScratch[1] = OpLit, OpNil
+		Operands(computer, opValScratch, opKindScratch)
 		computer.RegisterB = computer.RegisterB ^ computer.RegisterC
 
 		if DEBUG {
 			sb.WriteString("bxc RegisterB, RegisterC")
 		}
 	case 5: // out
-		ops := Operands(computer, OpCombo)
+		opKindScratch[0], opKindScratch[1] = OpCombo, OpNil
+		ops := Operands(computer, opValScratch, opKindScratch)
 		op1 := ops[0]
 
 		computer.Output = append(computer.Output, op1%8)
@@ -193,7 +236,8 @@ func HandleInstruction(computer *Computer) (debug string) {
 			sb.WriteString(fmt.Sprintf("out %d", op1))
 		}
 	case 6: // bdv
-		ops := Operands(computer, OpRegisterA, OpCombo)
+		opKindScratch[0], opKindScratch[1] = OpRegisterA, OpCombo
+		ops := Operands(computer, opValScratch, opKindScratch)
 		op1, op2 := ops[0], ops[1]
 
 		computer.RegisterB = int(
@@ -203,7 +247,8 @@ func HandleInstruction(computer *Computer) (debug string) {
 			sb.WriteString(fmt.Sprintf("bdv RegisterB, %d", op2))
 		}
 	case 7: // cdv
-		ops := Operands(computer, OpRegisterA, OpCombo)
+		opKindScratch[0], opKindScratch[1] = OpRegisterA, OpCombo
+		ops := Operands(computer, opValScratch, opKindScratch)
 		op1, op2 := ops[0], ops[1]
 
 		computer.RegisterC = int(
@@ -217,46 +262,41 @@ func HandleInstruction(computer *Computer) (debug string) {
 	return sb.String()
 }
 
-func Operands(computer *Computer, opKinds ...OpKind) [2]int {
-	i := 0
+func Operands(computer *Computer, scratch [2]int, opKinds [2]OpKind) [2]int {
+	for i := 0; i < 2; i++ {
+		opKind := opKinds[i]
 
-	for j := 0; j < len(opKinds); i, j = j+1, i+1 {
-		opKind := opKinds[j]
-
-		v := computer.Program[computer.IP]
-
-		if opKind == OpCombo || opKind == OpLit {
+		switch opKind {
+		case OpCombo:
+			v := computer.Program[computer.IP]
 			computer.IP++
-			if opKind == OpCombo {
-				if v >= 0 && v <= 3 {
-					OperandScratch[i] = v
-					continue
-				}
+			if v >= 0 && v <= 3 {
+				scratch[i] = v
+				continue
+			}
 
-				switch v {
-				case 4:
-					OperandScratch[i] = computer.RegisterA
-				case 5:
-					OperandScratch[i] = computer.RegisterB
-				case 6:
-					OperandScratch[i] = computer.RegisterC
-				}
-			} else {
-				OperandScratch[i] = v
+			switch v {
+			case 4:
+				scratch[i] = computer.RegisterA
+			case 5:
+				scratch[i] = computer.RegisterB
+			case 6:
+				scratch[i] = computer.RegisterC
 			}
-		} else {
-			switch opKind {
-			case OpRegisterA:
-				OperandScratch[i] = computer.RegisterA
-			case OpRegisterB:
-				OperandScratch[i] = computer.RegisterB
-			case OpRegisterC:
-				OperandScratch[i] = computer.RegisterC
-			}
+		case OpLit:
+			v := computer.Program[computer.IP]
+			computer.IP++
+			scratch[i] = v
+		case OpRegisterA:
+			scratch[i] = computer.RegisterA
+		case OpRegisterB:
+			scratch[i] = computer.RegisterB
+		case OpRegisterC:
+			scratch[i] = computer.RegisterC
 		}
 	}
 
-	return OperandScratch
+	return scratch
 }
 
 func equal(a, b []int) bool {
