@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	DEBUG  = true
+	DEBUG  = false
 	SAMPLE = false
 )
 
@@ -111,9 +111,9 @@ func main() {
 
 	InitialProgramSize = len(Initial.Program)
 
-	RegisterA := 0
+	RegisterA := 35184372088832
 
-	workerCount := 1
+	workerCount := 24
 	workC := make(chan Scope, workerCount)
 	doneC := make(chan int, workerCount)
 
@@ -146,7 +146,6 @@ func main() {
 	wg.Wait()
 
 	fmt.Println("Answer:", answer)
-
 }
 
 func Worker(id int, initial Computer, work chan Scope, done chan int, wg *sync.WaitGroup) {
@@ -159,17 +158,21 @@ func Worker(id int, initial Computer, work chan Scope, done chan int, wg *sync.W
 		for i := scope.Start; i <= scope.End; i++ {
 			regA := i
 
-			if regA%10_000_000 == 0 {
+			if regA%10_000 == 0 {
 				fmt.Printf("Worker %d, Scope: %d\n", id, scope)
 			}
 
 			computer := initial
 			computer.RegisterA = regA
 
-			fmt.Println("New Computer")
+			if DEBUG {
+				fmt.Println("New Computer")
+			}
 			for computer.IP < len(computer.Program) {
 				d := HandleInstruction(&computer, inScratch, outScratch)
-				fmt.Println(d)
+				if DEBUG {
+					fmt.Println(d)
+				}
 				if !equalPre(computer.Output, initial.Program) {
 					continue
 				}
