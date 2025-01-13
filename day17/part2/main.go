@@ -1,3 +1,23 @@
+/*
+Not sure what to do for this one.  The JNZ at the end of the program always goes back to the beginning.
+The registers get set to something like this:
+
+B = (A % 8) ^ 7
+C = (A / [2 ** [(A % 8) ^ 7]])
+B = B ^ 7
+A = A / 2 ** 3
+B = B ^ C
+
+Out = B % 8
+Jump to start if Register A not 0
+
+At the bare minimum Register A would have to be around 35184372088832 in order
+to output 16 numbers.  We know this because we can consider the whole program a
+loop and in each loop we divide Register A by 2 ** 3.  So Register A needs to be
+big enough to stay above 0 for many divisions.
+
+Beyond that though, I am not sure what to do.
+*/
 package main
 
 import (
@@ -13,7 +33,7 @@ import (
 )
 
 const (
-	DEBUG  = false
+	DEBUG  = true
 	SAMPLE = false
 )
 
@@ -55,7 +75,7 @@ func main() {
 	var b []byte
 	var err error
 
-	if DEBUG {
+	if DEBUG && false {
 		f, _ := os.Create("cpu.prof")
 		pprof.StartCPUProfile(f)
 
@@ -132,8 +152,8 @@ func main() {
 func Worker(id int, initial Computer, work chan Scope, done chan int, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	opValScratch := [2]int{}
-	opKindScratch := [2]OpKind{}
+	inScratch := [2]int{}
+	outScratch := [2]OpKind{}
 
 	for scope := range work {
 		for i := scope.Start; i <= scope.End; i++ {
@@ -148,7 +168,8 @@ func Worker(id int, initial Computer, work chan Scope, done chan int, wg *sync.W
 
 			fmt.Println("New Computer")
 			for computer.IP < len(computer.Program) {
-				HandleInstruction(&computer, opValScratch, opKindScratch)
+				d := HandleInstruction(&computer, inScratch, outScratch)
+				fmt.Println(d)
 				if !equalPre(computer.Output, initial.Program) {
 					continue
 				}
@@ -162,7 +183,7 @@ func Worker(id int, initial Computer, work chan Scope, done chan int, wg *sync.W
 	}
 }
 
-func HandleInstruction(computer *Computer, opValScratch [2]int, opKindScratch [2]OpKind) (debug string) {
+func HandleInstruction(computer *Computer, outScratch [2]int, inScratch [2]OpKind) (debug string) {
 	sb := strings.Builder{}
 
 	instruction := computer.Program[computer.IP]
@@ -170,8 +191,8 @@ func HandleInstruction(computer *Computer, opValScratch [2]int, opKindScratch [2
 
 	switch instruction {
 	case 0: // adv
-		opKindScratch[0], opKindScratch[1] = OpRegisterA, OpCombo
-		ops := Operands(computer, opValScratch, opKindScratch)
+		inScratch[0], inScratch[1] = OpRegisterA, OpCombo
+		ops, info := Operands(computer, outScratch, inScratch)
 
 		op1, op2 := ops[0], ops[1]
 
@@ -179,123 +200,135 @@ func HandleInstruction(computer *Computer, opValScratch [2]int, opKindScratch [2
 			float64(op1) / math.Pow(2.0, float64(op2)),
 		)
 		if DEBUG {
-			sb.WriteString(fmt.Sprintf("adv RegisterA, %d", op2))
+			sb.WriteString(fmt.Sprintf("adv RegisterA = %s / 2 ** %s", info[0], info[1]))
 		}
 	case 1: // bxl
-		opKindScratch[0], opKindScratch[1] = OpRegisterB, OpLit
-		ops := Operands(computer, opValScratch, opKindScratch)
+		inScratch[0], inScratch[1] = OpRegisterB, OpLit
+		ops, info := Operands(computer, outScratch, inScratch)
 		op1, op2 := ops[0], ops[1]
 
 		computer.RegisterB = op1 ^ op2
 		if DEBUG {
-			sb.WriteString(fmt.Sprintf("bxl RegisterB, %d", op2))
+			sb.WriteString(fmt.Sprintf("bxl RegisterB = %s ^ %s", info[0], info[1]))
 		}
 	case 2: // bst
-		opKindScratch[0], opKindScratch[1] = OpCombo, OpNil
-		ops := Operands(computer, opValScratch, opKindScratch)
+		inScratch[0], inScratch[1] = OpCombo, OpNil
+		ops, info := Operands(computer, outScratch, inScratch)
 		op1 := ops[0]
 
 		computer.RegisterB = op1 % 8
 		if DEBUG {
-			sb.WriteString(fmt.Sprintf("bst RegisterB, %d", op1))
+			sb.WriteString(fmt.Sprintf("bst RegisterB = %s %% 8", info[0]))
 		}
 	case 3: // jnz
 		if computer.RegisterA == 0 {
-			opKindScratch[0], opKindScratch[1] = OpLit, OpNil
-			Operands(computer, opValScratch, opKindScratch)
+			inScratch[0], inScratch[1] = OpLit, OpNil
+			Operands(computer, outScratch, inScratch)
 
 			if DEBUG {
 				sb.WriteString("jnz SKIPPED")
 			}
 		} else {
-			opKindScratch[0], opKindScratch[1] = OpLit, OpNil
-			ops := Operands(computer, opValScratch, opKindScratch)
+			inScratch[0], inScratch[1] = OpLit, OpNil
+			ops, info := Operands(computer, outScratch, inScratch)
 			op1 := ops[0]
 
 			computer.IP = op1
 			if DEBUG {
-				sb.WriteString(fmt.Sprintf("jnz %d", op1))
+				sb.WriteString(fmt.Sprintf("jnz %s", info[0]))
 			}
 		}
 	case 4: // bxc
-		opKindScratch[0], opKindScratch[1] = OpLit, OpNil
-		Operands(computer, opValScratch, opKindScratch)
+		inScratch[0], inScratch[1] = OpLit, OpNil
+		Operands(computer, outScratch, inScratch)
 		computer.RegisterB = computer.RegisterB ^ computer.RegisterC
 
 		if DEBUG {
-			sb.WriteString("bxc RegisterB, RegisterC")
+			sb.WriteString(fmt.Sprintf("bxc RegisterB = (Register B) ^ (Register C)"))
 		}
 	case 5: // out
-		opKindScratch[0], opKindScratch[1] = OpCombo, OpNil
-		ops := Operands(computer, opValScratch, opKindScratch)
+		inScratch[0], inScratch[1] = OpCombo, OpNil
+		ops, info := Operands(computer, outScratch, inScratch)
 		op1 := ops[0]
 
 		computer.Output = append(computer.Output, op1%8)
 		if DEBUG {
-			sb.WriteString(fmt.Sprintf("out %d", op1))
+			sb.WriteString(fmt.Sprintf("out %s %% 8", info[0]))
 		}
 	case 6: // bdv
-		opKindScratch[0], opKindScratch[1] = OpRegisterA, OpCombo
-		ops := Operands(computer, opValScratch, opKindScratch)
+		inScratch[0], inScratch[1] = OpRegisterA, OpCombo
+		ops, info := Operands(computer, outScratch, inScratch)
 		op1, op2 := ops[0], ops[1]
 
 		computer.RegisterB = int(
 			float64(op1) / math.Pow(2.0, float64(op2)),
 		)
 		if DEBUG {
-			sb.WriteString(fmt.Sprintf("bdv RegisterB, %d", op2))
+			sb.WriteString(fmt.Sprintf("bdv RegisterB = %s / 2 ** %s", info[0], info[1]))
 		}
 	case 7: // cdv
-		opKindScratch[0], opKindScratch[1] = OpRegisterA, OpCombo
-		ops := Operands(computer, opValScratch, opKindScratch)
+		inScratch[0], inScratch[1] = OpRegisterA, OpCombo
+		ops, info := Operands(computer, outScratch, inScratch)
 		op1, op2 := ops[0], ops[1]
 
 		computer.RegisterC = int(
 			float64(op1) / math.Pow(2.0, float64(op2)),
 		)
 		if DEBUG {
-			sb.WriteString(fmt.Sprintf("cdv RegisterC, %d", op2))
+			sb.WriteString(fmt.Sprintf("cdv RegisterC = %s / 2 ** %s", info[0], info[1]))
 		}
 	}
 
 	return sb.String()
 }
 
-func Operands(computer *Computer, scratch [2]int, opKinds [2]OpKind) [2]int {
+func Operands(computer *Computer, out [2]int, in [2]OpKind) ([2]int, [2]string) {
+	debug := [2]string{}
+
 	for i := 0; i < 2; i++ {
-		opKind := opKinds[i]
+		opKind := in[i]
 
 		switch opKind {
+		case OpNil:
+			continue
 		case OpCombo:
 			v := computer.Program[computer.IP]
 			computer.IP++
 			if v >= 0 && v <= 3 {
-				scratch[i] = v
+				out[i] = v
+				debug[i] = fmt.Sprintf("(Combo Literal %d)", v)
 				continue
 			}
 
 			switch v {
 			case 4:
-				scratch[i] = computer.RegisterA
+				out[i] = computer.RegisterA
+				debug[i] = fmt.Sprintf("(Combo Register A %d)", computer.RegisterA)
 			case 5:
-				scratch[i] = computer.RegisterB
+				out[i] = computer.RegisterB
+				debug[i] = fmt.Sprintf("(Combo Register B %d)", computer.RegisterB)
 			case 6:
-				scratch[i] = computer.RegisterC
+				out[i] = computer.RegisterC
+				debug[i] = fmt.Sprintf("(Combo Register C %d)", computer.RegisterC)
 			}
 		case OpLit:
 			v := computer.Program[computer.IP]
 			computer.IP++
-			scratch[i] = v
+			out[i] = v
+			debug[i] = fmt.Sprintf("(Literal %d)", v)
 		case OpRegisterA:
-			scratch[i] = computer.RegisterA
+			out[i] = computer.RegisterA
+			debug[i] = fmt.Sprintf("(Register A %d)", computer.RegisterA)
 		case OpRegisterB:
-			scratch[i] = computer.RegisterB
+			out[i] = computer.RegisterB
+			debug[i] = fmt.Sprintf("(Register B %d)", computer.RegisterB)
 		case OpRegisterC:
-			scratch[i] = computer.RegisterC
+			out[i] = computer.RegisterC
+			debug[i] = fmt.Sprintf("(Register C %d)", computer.RegisterC)
 		}
 	}
 
-	return scratch
+	return out, debug
 }
 
 func equal(a, b []int) bool {
