@@ -13,10 +13,18 @@ Jump to start if Register A not 0
 
 At the bare minimum Register A would have to be around 35184372088832 in order
 to output 16 numbers.  We know this because we can consider the whole program a
-loop and in each loop we divide Register A by 2 ** 3.  So Register A needs to be
+loop and in each loop we divide Register A by 2 ** 3 (8).  So Register A needs to be
 big enough to stay above 0 for many divisions.
 
 Beyond that though, I am not sure what to do.
+
+The entire program depends on Register A.  And for every loop that is true.
+
+Maybe only some of the bits of Register A matter so we can figure it out in
+parts and then combine those bits in the end to see what the answer is?
+
+Also at the start of every loop B and C get set to relative to A.
+So their values for the last loop are basically thrown out.
 */
 package main
 
@@ -28,7 +36,6 @@ import (
 	"os/signal"
 	"runtime/pprof"
 	"strings"
-	"sync"
 	"syscall"
 )
 
@@ -38,8 +45,7 @@ const (
 )
 
 var (
-	Initial            Computer
-	InitialProgramSize int
+	Initial Computer
 )
 
 type Scope struct {
@@ -57,6 +63,12 @@ type Computer struct {
 	Program []int
 
 	Output []int
+}
+
+func (c *Computer) Run(scratch [2]int, in [2]OpKind) {
+	for c.IP < len(c.Program) {
+		HandleInstruction(c, scratch, in)
+	}
 }
 
 type OpKind int
@@ -79,7 +91,7 @@ func main() {
 		f, _ := os.Create("cpu.prof")
 		pprof.StartCPUProfile(f)
 
-		c := make(chan os.Signal)
+		c := make(chan os.Signal, 1)
 		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 		go func() {
 			<-c
@@ -101,92 +113,38 @@ func main() {
 	lines := strings.Split(input, "\n")
 	lines = lines[:len(lines)-1]
 
+	fullProgram := scan.Numbers(lines[4])
+
 	Initial := Computer{
 		IP:        0,
-		RegisterA: scan.Numbers(lines[0])[0],
-		RegisterB: scan.Numbers(lines[1])[0],
-		RegisterC: scan.Numbers(lines[2])[0],
-		Program:   scan.Numbers(lines[4]),
+		RegisterA: 0,
+		RegisterB: 0,
+		RegisterC: 0,
+		Program:   fullProgram[:len(fullProgram)-2], // take the full program without the jump at the end
 	}
 
-	InitialProgramSize = len(Initial.Program)
-
-	RegisterA := 35184372088832
-
-	workerCount := 24
-	workC := make(chan Scope, workerCount)
-	doneC := make(chan int, workerCount)
-
-	wg := &sync.WaitGroup{}
-	for i := 0; i < workerCount; i++ {
-		wg.Add(1)
-		go Worker(i, Initial, workC, doneC, wg)
+	for i := 0; i < 14; i++ {
+		fmt.Printf("(%d) %b %%\t8 %b\n", i, i, i%8)
 	}
 
-	var answer int
-	go func() {
-		for {
-			select {
-			case answer = <-doneC:
-				close(workC)
-				return
-			default:
-				size := 10_000_000
-				scope := Scope{
-					Start: RegisterA,
-					End:   RegisterA + size,
-				}
-				RegisterA += size
+	var in [2]OpKind
+	var scratch [2]int
 
-				workC <- scope
-			}
-		}
-	}()
+	fmt.Println("Computer stuff")
+	for i := 0; i <= 100; i++ {
+		sample := Initial
+		sample.RegisterA = i
+		sample.Run(scratch, in)
+		fmt.Println(i, sample.RegisterB)
+	}
 
-	wg.Wait()
-
-	fmt.Println("Answer:", answer)
+	// RegisterA := 35184372088832
+	// fmt.Println(RegisterA)
+	// RegisterA = 0b1000000000000000000000000000000000000000000000
+	// fmt.Println(RegisterA)
 }
 
-func Worker(id int, initial Computer, work chan Scope, done chan int, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	inScratch := [2]int{}
-	outScratch := [2]OpKind{}
-
-	for scope := range work {
-		for i := scope.Start; i <= scope.End; i++ {
-			regA := i
-
-			if regA%10_000 == 0 {
-				fmt.Printf("Worker %d, Scope: %d\n", id, scope)
-			}
-
-			computer := initial
-			computer.RegisterA = regA
-
-			if DEBUG {
-				fmt.Println("New Computer")
-			}
-			for computer.IP < len(computer.Program) {
-				d := HandleInstruction(&computer, inScratch, outScratch)
-				if DEBUG {
-					fmt.Println(d)
-				}
-				if !equalPre(computer.Output, initial.Program) {
-					continue
-				}
-			}
-
-			if equal(computer.Output, initial.Program) {
-				done <- regA
-				return
-			}
-		}
-	}
-}
-
-func HandleInstruction(computer *Computer, outScratch [2]int, inScratch [2]OpKind) (debug string) {
+func HandleInstruction(computer *Computer, scratch [2]int, inputs [2]OpKind) (debug string) {
 	sb := strings.Builder{}
 
 	instruction := computer.Program[computer.IP]
@@ -194,8 +152,8 @@ func HandleInstruction(computer *Computer, outScratch [2]int, inScratch [2]OpKin
 
 	switch instruction {
 	case 0: // adv
-		inScratch[0], inScratch[1] = OpRegisterA, OpCombo
-		ops, info := Operands(computer, outScratch, inScratch)
+		inputs[0], inputs[1] = OpRegisterA, OpCombo
+		ops, info := Operands(computer, scratch, inputs)
 
 		op1, op2 := ops[0], ops[1]
 
@@ -206,8 +164,8 @@ func HandleInstruction(computer *Computer, outScratch [2]int, inScratch [2]OpKin
 			sb.WriteString(fmt.Sprintf("adv RegisterA = %s / 2 ** %s", info[0], info[1]))
 		}
 	case 1: // bxl
-		inScratch[0], inScratch[1] = OpRegisterB, OpLit
-		ops, info := Operands(computer, outScratch, inScratch)
+		inputs[0], inputs[1] = OpRegisterB, OpLit
+		ops, info := Operands(computer, scratch, inputs)
 		op1, op2 := ops[0], ops[1]
 
 		computer.RegisterB = op1 ^ op2
@@ -215,8 +173,8 @@ func HandleInstruction(computer *Computer, outScratch [2]int, inScratch [2]OpKin
 			sb.WriteString(fmt.Sprintf("bxl RegisterB = %s ^ %s", info[0], info[1]))
 		}
 	case 2: // bst
-		inScratch[0], inScratch[1] = OpCombo, OpNil
-		ops, info := Operands(computer, outScratch, inScratch)
+		inputs[0], inputs[1] = OpCombo, OpNil
+		ops, info := Operands(computer, scratch, inputs)
 		op1 := ops[0]
 
 		computer.RegisterB = op1 % 8
@@ -225,15 +183,15 @@ func HandleInstruction(computer *Computer, outScratch [2]int, inScratch [2]OpKin
 		}
 	case 3: // jnz
 		if computer.RegisterA == 0 {
-			inScratch[0], inScratch[1] = OpLit, OpNil
-			Operands(computer, outScratch, inScratch)
+			inputs[0], inputs[1] = OpLit, OpNil
+			Operands(computer, scratch, inputs)
 
 			if DEBUG {
 				sb.WriteString("jnz SKIPPED")
 			}
 		} else {
-			inScratch[0], inScratch[1] = OpLit, OpNil
-			ops, info := Operands(computer, outScratch, inScratch)
+			inputs[0], inputs[1] = OpLit, OpNil
+			ops, info := Operands(computer, scratch, inputs)
 			op1 := ops[0]
 
 			computer.IP = op1
@@ -242,16 +200,16 @@ func HandleInstruction(computer *Computer, outScratch [2]int, inScratch [2]OpKin
 			}
 		}
 	case 4: // bxc
-		inScratch[0], inScratch[1] = OpLit, OpNil
-		Operands(computer, outScratch, inScratch)
+		inputs[0], inputs[1] = OpLit, OpNil
+		Operands(computer, scratch, inputs)
 		computer.RegisterB = computer.RegisterB ^ computer.RegisterC
 
 		if DEBUG {
 			sb.WriteString(fmt.Sprintf("bxc RegisterB = (Register B) ^ (Register C)"))
 		}
 	case 5: // out
-		inScratch[0], inScratch[1] = OpCombo, OpNil
-		ops, info := Operands(computer, outScratch, inScratch)
+		inputs[0], inputs[1] = OpCombo, OpNil
+		ops, info := Operands(computer, scratch, inputs)
 		op1 := ops[0]
 
 		computer.Output = append(computer.Output, op1%8)
@@ -259,8 +217,8 @@ func HandleInstruction(computer *Computer, outScratch [2]int, inScratch [2]OpKin
 			sb.WriteString(fmt.Sprintf("out %s %% 8", info[0]))
 		}
 	case 6: // bdv
-		inScratch[0], inScratch[1] = OpRegisterA, OpCombo
-		ops, info := Operands(computer, outScratch, inScratch)
+		inputs[0], inputs[1] = OpRegisterA, OpCombo
+		ops, info := Operands(computer, scratch, inputs)
 		op1, op2 := ops[0], ops[1]
 
 		computer.RegisterB = int(
@@ -270,8 +228,8 @@ func HandleInstruction(computer *Computer, outScratch [2]int, inScratch [2]OpKin
 			sb.WriteString(fmt.Sprintf("bdv RegisterB = %s / 2 ** %s", info[0], info[1]))
 		}
 	case 7: // cdv
-		inScratch[0], inScratch[1] = OpRegisterA, OpCombo
-		ops, info := Operands(computer, outScratch, inScratch)
+		inputs[0], inputs[1] = OpRegisterA, OpCombo
+		ops, info := Operands(computer, scratch, inputs)
 		op1, op2 := ops[0], ops[1]
 
 		computer.RegisterC = int(
