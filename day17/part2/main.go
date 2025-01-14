@@ -135,7 +135,7 @@ func main() {
 		sample := Initial
 		sample.RegisterA = i
 		sample.Run(scratch, in)
-		fmt.Println(i, sample.RegisterB)
+		fmt.Println(i, sample.RegisterC)
 	}
 
 	// RegisterA := 35184372088832
