@@ -113,35 +113,32 @@ func main() {
 	lines := strings.Split(input, "\n")
 	lines = lines[:len(lines)-1]
 
-	fullProgram := scan.Numbers(lines[4])
+	full := scan.Numbers(lines[4])
+	oneLoop := full[:len(full)-2]
+	_ = oneLoop
 
 	Initial := Computer{
 		IP:        0,
 		RegisterA: 0,
 		RegisterB: 0,
 		RegisterC: 0,
-		Program:   fullProgram[:len(fullProgram)-2], // take the full program without the jump at the end
-	}
-
-	for i := 0; i < 14; i++ {
-		fmt.Printf("(%d) %b %%\t8 %b\n", i, i, i%8)
+		Program:   full, // take the full program without the jump at the end
 	}
 
 	var in [2]OpKind
 	var scratch [2]int
 
+	RegisterA := 35184372088832
+	RegisterA = 0b1100000000000000000000000000000000000000000000
+
 	fmt.Println("Computer stuff")
-	for i := 0; i <= 100; i++ {
+	for i := RegisterA; i <= RegisterA+900_000_000; i += 1 {
 		sample := Initial
 		sample.RegisterA = i
 		sample.Run(scratch, in)
-		fmt.Println(i, sample.RegisterC)
+		fmt.Println(sample.Output)
 	}
 
-	// RegisterA := 35184372088832
-	// fmt.Println(RegisterA)
-	// RegisterA = 0b1000000000000000000000000000000000000000000000
-	// fmt.Println(RegisterA)
 }
 
 func HandleInstruction(computer *Computer, scratch [2]int, inputs [2]OpKind) (debug string) {
