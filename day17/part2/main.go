@@ -35,6 +35,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/pprof"
+	"slices"
 	"strings"
 	"syscall"
 )
@@ -113,33 +114,53 @@ func main() {
 	lines := strings.Split(input, "\n")
 	lines = lines[:len(lines)-1]
 
-	full := scan.Numbers(lines[4])
-	oneLoop := full[:len(full)-2]
-	_ = oneLoop
-
 	Initial := Computer{
 		IP:        0,
 		RegisterA: 0,
 		RegisterB: 0,
 		RegisterC: 0,
-		Program:   full, // take the full program without the jump at the end
+		Program:   scan.Numbers(lines[4]), // take the full program without the jump at the end
 	}
 
 	var in [2]OpKind
 	var scratch [2]int
 
-	RegisterA := 35184372088832
-	RegisterA = 0b1000000000000000000000000000000000000000000000
-	RegisterA = 0b11000001_00110100_01011000_00011100_01101010_000000
+	reverse := slices.Clone(Initial.Program)
+	slices.Reverse(reverse)
 
-	fmt.Println("Computer stuff")
-	for i := RegisterA; i <= RegisterA+10; i += 1 {
-		sample := Initial
-		sample.RegisterA = i
-		sample.Run(scratch, in)
-		fmt.Println(sample.Output)
+	answers := []int{}
+	potentials := []int{7} // Precomputed the fact that the lower bits of the answer would have to be 0 or 7.  But I also hand checked some stuff and know that the lower bits can't be 0.
+
+	for len(potentials) > 0 {
+		temp := []int{}
+
+		for _, potential := range potentials {
+			for j := 0; j < 8; j++ {
+				sample := Initial
+				sample.RegisterA = (potential << 3) + j
+				sample.Run(scratch, in)
+
+				if equalTail(sample.Output, Initial.Program) {
+					temp = append(temp, (potential<<3)+j)
+					fmt.Println("This is ok so far", (potential<<3)+j, sample.Output)
+
+					if len(sample.Output) == len(Initial.Program) {
+						answers = append(answers, (potential<<3)+j)
+					}
+				}
+			}
+		}
+		potentials = temp
 	}
 
+	min := math.MaxInt
+
+	for _, a := range answers {
+		if a < min {
+			min = a
+		}
+	}
+	fmt.Println(min)
 }
 
 func HandleInstruction(computer *Computer, scratch [2]int, inputs [2]OpKind) (debug string) {
@@ -290,24 +311,20 @@ func Operands(computer *Computer, out [2]int, in [2]OpKind) ([2]int, [2]string) 
 	return out, debug
 }
 
-func equal(a, b []int) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-
-	return true
-}
-
-func equalPre(a, b []int) bool {
+func equalTail(a, b []int) bool {
 	if len(a) > len(b) {
 		return false
 	}
+
+	fmt.Println("Comparing:")
+	fmt.Println(a)
+	fmt.Println(b)
+
+	b = slices.Clone(b)
+	slices.Reverse(b)
+
+	a = slices.Clone(a)
+	slices.Reverse(a)
 
 	for i := range a {
 		if a[i] != b[i] {
