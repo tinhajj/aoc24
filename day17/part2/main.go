@@ -129,10 +129,11 @@ func main() {
 	var scratch [2]int
 
 	RegisterA := 35184372088832
-	RegisterA = 0b1100000000000000000000000000000000000000000000
+	RegisterA = 0b1000000000000000000000000000000000000000000000
+	RegisterA = 0b11000001_00110100_01011000_00011100_01101010_000000
 
 	fmt.Println("Computer stuff")
-	for i := RegisterA; i <= RegisterA+900_000_000; i += 1 {
+	for i := RegisterA; i <= RegisterA+10; i += 1 {
 		sample := Initial
 		sample.RegisterA = i
 		sample.Run(scratch, in)
