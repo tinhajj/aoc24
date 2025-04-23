@@ -24,8 +24,8 @@ type Point struct {
 
 func (p *Point) Add(v Point) Point {
 	return Point{
-		X: v.X,
-		Y: v.Y,
+		X: v.X + p.X,
+		Y: v.Y + p.Y,
 	}
 }
 
@@ -73,15 +73,13 @@ func main() {
 		}
 	}
 
-	prev := Dijkstra(grid, adj, grid[0][0])
+	dist, prev := Dijkstra(grid, adj, grid[0][0])
 	_ = prev
-	// fmt.Println(prev)
 
-	fmt.Println(grid[6][6])
-	// fmt.Println(prev[grid[6][6]])
+	fmt.Println(dist[grid[6][6]])
 }
 
-func Dijkstra(grid [][]*Point, adjs map[*Point][]*Point, start *Point) map[*Point]*Point {
+func Dijkstra(grid [][]*Point, adjs map[*Point][]*Point, start *Point) (map[*Point]int, map[*Point]*Point) {
 	distance := map[*Point]int{}
 	previous := map[*Point]*Point{}
 
@@ -102,11 +100,6 @@ func Dijkstra(grid [][]*Point, adjs map[*Point][]*Point, start *Point) map[*Poin
 		min := queue[i]
 		for j, q := range queue {
 			if distance[q] < distance[min] {
-				if q.X == 6 && q.Y == 6 {
-					x := 3
-					_ = x / 3
-				}
-
 				min = q
 				i = j
 			}
@@ -116,6 +109,16 @@ func Dijkstra(grid [][]*Point, adjs map[*Point][]*Point, start *Point) map[*Poin
 		queue = append(queue[:i], queue[i+1:]...)
 
 		for _, adj := range adjs[min] {
+			inQueue := false
+			for _, q := range queue {
+				if q == adj {
+					inQueue = true
+				}
+			}
+			if !inQueue {
+				continue
+			}
+
 			alt := distance[min] + 1
 			if alt < distance[adj] {
 				distance[adj] = alt
@@ -124,7 +127,7 @@ func Dijkstra(grid [][]*Point, adjs map[*Point][]*Point, start *Point) map[*Poin
 		}
 	}
 
-	return previous
+	return distance, previous
 }
 
 func Around(p *Point, grid [][]*Point) []*Point {
