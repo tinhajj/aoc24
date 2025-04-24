@@ -83,15 +83,18 @@ func main() {
 		}
 	}
 
-	for i := 0; i < SIMULATIONCOUNT; i++ {
-		corruption := corruptions[i]
+	for i, corruption := range corruptions {
 		grid[corruption.Y][corruption.X].Corrupt = true
+		dist, _ := Dijkstra(grid, adj, grid[0][0])
+
+		corner := grid[HEIGHT][WIDTH]
+
+		if dist[corner] == math.MaxInt {
+			fmt.Println(corruption)
+			break
+		}
+		fmt.Printf("%d / %d\n", i, len(corruptions))
 	}
-
-	dist, prev := Dijkstra(grid, adj, grid[0][0])
-	_ = prev
-
-	fmt.Println(dist[grid[HEIGHT][WIDTH]])
 }
 
 func Dijkstra(grid [][]*Point, adjs map[*Point][]*Point, start *Point) (map[*Point]int, map[*Point]*Point) {
