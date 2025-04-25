@@ -25,6 +25,15 @@ parts and then combine those bits in the end to see what the answer is?
 
 Also at the start of every loop B and C get set to relative to A.
 So their values for the last loop are basically thrown out.
+
+For the last loop only the 3 bits would matter which determines the last thing
+output.  This is because of the constant divisions.  So first start there and
+work backwards, shift that by 3 and keep going.  Figure out the bits that could
+be added to the end that would still line up with the output.
+
+Had to look up some help on reddit for this, and the answers didn't click right
+away but it makes sense now and was an ok intro to looking at some assembly and
+making some inferences
 */
 package main
 
