@@ -12,8 +12,13 @@ import (
 var (
 	SAMPLE   = false
 	PATTERNS = []string{}
-	CACHE    = map[string]bool{}
+	CACHE    = map[string]Solution{}
 )
+
+type Solution struct {
+	Solveable bool
+	Ways      int
+}
 
 func main() {
 	var err error
@@ -64,38 +69,39 @@ func main() {
 
 	sum := 0
 	for _, test := range tests {
-		ok := solve(test)
-		if ok {
-			sum++
-			fmt.Println(test)
+		solution := solve(test)
+		if solution.Solveable {
+			sum += solution.Ways
 		}
 	}
 	fmt.Println(sum)
 }
 
-func solve(test string) bool {
-	solveable, ok := CACHE[test]
+func solve(test string) Solution {
+	solution, ok := CACHE[test]
 	if ok {
-		return solveable
+		return solution
 	}
 
 	if len(test) == 0 {
-		return true
+		return Solution{Solveable: true, Ways: 1}
 	}
 
-	solveable = false
+	solution = Solution{Solveable: false, Ways: 0}
+
 	for _, pattern := range PATTERNS {
 		if strings.HasPrefix(test, pattern) {
-			sub := test[len(pattern):]
+			subPattern := test[len(pattern):]
+			subSolution := solve(subPattern)
+			CACHE[subPattern] = subSolution
 
-			ok := solve(sub)
-			CACHE[sub] = ok
-
-			if ok {
-				solveable = true
+			if subSolution.Solveable {
+				solution.Solveable = true
+				solution.Ways += subSolution.Ways
 			}
 		}
 	}
+	CACHE[test] = solution
 
-	return solveable
+	return solution
 }
