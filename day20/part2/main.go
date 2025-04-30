@@ -84,26 +84,33 @@ func main() {
 		backtrack = prev[backtrack]
 	}
 
-	allJumps := map[CheatJump]int{}
+	jumpSavings := map[CheatJump]int{}
 
 	for _, p := range path {
 		distBefore := dist[p]
 		jumps := CheatJumps(p, grid)
-		for _, j := range jumps {
-			_, ok := allJumps[j]
+		for k, v := range jumps {
+			_, ok := jumpSavings[k]
 			if ok {
 				continue
 			}
-			distAfter := dist[j.End]
-			distSaved := distBefore - distAfter - 2
-			allJumps[j] = distSaved
+			distAfter := dist[k.End]
+			distSaved := distBefore - distAfter - v
+			jumpSavings[k] = distSaved
 		}
 	}
 
 	counts := 0
-	for _, v := range allJumps {
+	for _, v := range jumpSavings {
 		if v >= 100 {
 			counts++
+		}
+	}
+
+	over50 := map[int]int{}
+	for _, v := range jumpSavings {
+		if v >= 50 {
+			over50[v]++
 		}
 	}
 
@@ -162,58 +169,85 @@ func Dijkstra(grid [][]*Point, adjs map[*Point][]*Point, start *Point) (map[*Poi
 	return distance, previous
 }
 
-func CheatJumps(p *Point, grid [][]*Point) []CheatJump {
-	jumps := map[CheatJump]struct{}{}
-	directions := []Point{
-		Point{0, -1, ""},
-		Point{-1, 0, ""},
-		Point{1, 0, ""},
-		Point{0, 1, ""},
+func OOB(x, y int, grid [][]*Point) bool {
+	if y < 0 || x < 0 {
+		return true
 	}
 
-	for _, direction := range directions {
-		other := p.Add(direction)
-
-		if other.X < 0 || other.Y < 0 {
-			continue
-		}
-
-		if other.X > len(grid[0])-1 || other.Y > len(grid)-1 {
-			continue
-		}
-
-		op := grid[other.Y][other.X]
-
-		// cheat must pass through a wall to have any chance of saving time
-		if op.Val != "#" {
-			continue
-		}
-
-		for _, direction := range directions {
-			temp := other.Add(direction)
-			if temp.X < 0 || temp.Y < 0 {
-				continue
-			}
-
-			if temp.X > len(grid[0])-1 || temp.Y > len(grid)-1 {
-				continue
-			}
-			final := grid[temp.Y][temp.X]
-			if final.Val == "#" {
-				continue
-			}
-			if final == p {
-				continue
-			}
-			jumps[CheatJump{Start: p, End: final}] = struct{}{}
-		}
+	if y > len(grid)-1 || x > len(grid[0])-1 {
+		return true
 	}
 
-	results := []CheatJump{}
-	for k, _ := range jumps {
-		results = append(results, k)
+	return false
+}
+
+func CheatJumps(origin *Point, grid [][]*Point) map[CheatJump]int {
+	// a weird way to get all the points within 20 spaces
+	jumps := map[CheatJump]int{}
+
+	distance := 20
+	xdelta := distance
+
+	for ydelta := 0; ydelta <= distance; ydelta++ {
+		howFar := distance
+
+		for x := origin.X - xdelta; x <= origin.X+xdelta; x++ {
+			otherX := x
+			otherY := origin.Y + ydelta
+
+			currentHowFar := howFar
+
+			if otherX >= origin.X {
+				howFar++
+			} else {
+				howFar--
+			}
+
+			if OOB(otherX, otherY, grid) {
+				continue
+			}
+
+			otherP := grid[otherY][otherX]
+
+			if otherP == origin || otherP.Val == "#" {
+				continue
+			}
+
+			jumps[CheatJump{Start: origin, End: otherP}] = currentHowFar
+		}
+		xdelta--
 	}
-	return results
+	xdelta = distance
+	for ydelta := 0; ydelta >= -distance; ydelta-- {
+		howFar := distance
+
+		for x := origin.X - xdelta; x <= origin.X+xdelta; x++ {
+			otherX := x
+			otherY := origin.Y + ydelta
+
+			currentHowFar := howFar
+
+			if otherX >= origin.X {
+				howFar++
+			} else {
+				howFar--
+			}
+
+			if OOB(otherX, otherY, grid) {
+				continue
+			}
+
+			otherP := grid[otherY][otherX]
+
+			if otherP == origin || otherP.Val == "#" {
+				continue
+			}
+			jumps[CheatJump{Start: origin, End: otherP}] = currentHowFar
+		}
+		xdelta--
+	}
+
+	return jumps
 }
 
 func Around(p *Point, grid [][]*Point) []*Point {
